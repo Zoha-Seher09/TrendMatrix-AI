@@ -42,6 +42,7 @@ from statistical_analysis import analyze_trend
 from visualization import create_time_series_chart, save_chart_html
 from ai_explainer import explain_analysis
 from report_generator import generate_report
+from services.location_service import search_photon_locations
 
 
 # ---------------------------------------------------------------------
@@ -79,18 +80,6 @@ SUPPORTED_VARIABLES = {
     "solar_radiation": "Solar Radiation",
 }
 
-# Photon is an OpenStreetMap-based global geocoding service.
-PHOTON_URL = "https://photon.komoot.io/api/"
-
-GEOCODING_USER_AGENT = (
-    "TrendMatrixAI/1.0 "
-    "(NASA Space Apps educational project)"
-)
-
-# Short-lived in-memory cache for repeated location searches.
-GEOCODING_CACHE = {}
-GEOCODING_CACHE_TTL = 300
-GEOCODING_CACHE_LIMIT = 200
 
 # Gemini should not hold the entire dashboard request indefinitely.
 GEMINI_WAIT_SECONDS = 18
@@ -342,139 +331,6 @@ def validate_request_data(payload: dict):
         "end_date": end_date,
         "frequency": frequency,
     }, None
-
-
-# ---------------------------------------------------------------------
-# Global location search
-# ---------------------------------------------------------------------
-
-def get_photon_display_name(properties: dict) -> tuple[str, str]:
-
-    name = (
-        properties.get("name")
-        or properties.get("city")
-        or properties.get("country")
-        or "Unknown location"
-    )
-
-    locality = (
-        properties.get("city")
-        or properties.get("district")
-        or properties.get("county")
-        or properties.get("state")
-        or ""
-    )
-
-    country = properties.get("country", "")
-
-    context_parts = []
-
-    for part in (locality, properties.get("state"), country):
-
-        if part and part.casefold() != str(name).casefold():
-            if part not in context_parts:
-                context_parts.append(part)
-
-    context = ", ".join(context_parts)
-
-    short_name = name
-
-    if context:
-        short_name = f"{name}, {context}"
-
-    return name, short_name
-
-
-def search_photon_locations(query: str) -> list:
-
-    cache_key = query.casefold().strip()
-    now = time.monotonic()
-
-    cached = GEOCODING_CACHE.get(cache_key)
-
-    if cached:
-        created_at, cached_results = cached
-
-        if now - created_at < GEOCODING_CACHE_TTL:
-            return cached_results
-
-    response = requests.get(
-        PHOTON_URL,
-        params={
-            "q": query,
-            "limit": 12,
-            "lang": "en",
-        },
-        headers={
-            "User-Agent": GEOCODING_USER_AGENT,
-        },
-        timeout=6,
-    )
-
-    response.raise_for_status()
-
-    features = response.json().get("features", [])
-
-    results = []
-    seen = set()
-
-    for feature in features:
-
-        properties = feature.get("properties", {})
-        geometry = feature.get("geometry", {})
-
-        coordinates = geometry.get("coordinates", [])
-
-        if len(coordinates) < 2:
-            continue
-
-        try:
-            longitude = float(coordinates[0])
-            latitude = float(coordinates[1])
-
-        except (TypeError, ValueError):
-            continue
-
-        if not -90 <= latitude <= 90:
-            continue
-
-        if not -180 <= longitude <= 180:
-            continue
-
-        name, short_name = get_photon_display_name(properties)
-
-        identity = (
-            short_name.casefold(),
-            round(latitude, 5),
-            round(longitude, 5),
-        )
-
-        if identity in seen:
-            continue
-
-        seen.add(identity)
-
-        results.append({
-            "name": name,
-            "short_name": short_name,
-            "latitude": latitude,
-            "longitude": longitude,
-            "country": properties.get("country", ""),
-            "state": properties.get("state", ""),
-            "city": (
-                properties.get("city")
-                or properties.get("district")
-                or ""
-            ),
-            "type": properties.get("type", "location"),
-        })
-
-    if len(GEOCODING_CACHE) >= GEOCODING_CACHE_LIMIT:
-        GEOCODING_CACHE.clear()
-
-    GEOCODING_CACHE[cache_key] = (now, results)
-
-    return results
 
 
 @app.get("/api/geocode")
