@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrendMatrix AI | Earth Systems Trend Detective</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+<main class="container">
+
+<header>
+<h1>TrendMatrix AI</h1>
+<div class="subtitle">
+Be an Earth Systems Trend Detective. Explore NASA observations,
+identify long-term trends, and generate scientific reports.
+</div>
+</header>
+
+<section class="panel">
+<h2>Dataset Selection</h2>
+
+<p class="muted">
+Choose an Earth science variable and search globally for a
+country, city, or region. Coordinates are detected automatically.
+Live NASA observations are requested first.
+</p>
+
+<form id="analysisForm">
+
+<div class="form-grid">
+
+<div class="field">
+<label for="variable">Earth Science Variable</label>
+
+<select id="variable" name="variable" required>
+<option value="temperature">Air Temperature</option>
+<option value="humidity">Relative Humidity</option>
+<option value="wind_speed">Wind Speed</option>
+<option value="precipitation">Precipitation</option>
+<option value="soil_moisture">Soil Moisture</option>
+<option value="evapotranspiration">Evapotranspiration</option>
+<option value="ndvi">Normalized Difference Vegetation Index (NDVI)</option>
+<option value="solar_radiation">Solar Radiation</option>
+</select>
+</div>
+
+<div class="field">
+<label for="locationSearch">Country, City, or Region</label>
+
+<input
+ id="locationSearch"
+ autocomplete="off"
+ placeholder="Start typing: Pakistan, Lahore, London..."
+ required
+>
+
+<div id="suggestions" class="suggestions"></div>
+
+<div id="locationHint" class="hint">
+Type at least two letters. Worldwide suggestions will appear automatically.
+</div>
+
+<input type="hidden" id="region" name="region">
+<input type="hidden" id="latitude" name="latitude">
+<input type="hidden" id="longitude" name="longitude">
+
+</div>
+
+<div class="field">
+<label for="start_date">Start Date</label>
+<input
+ id="start_date"
+ name="start_date"
+ type="date"
+ value="2016-01-01"
+ required
+>
+</div>
+
+<div class="field">
+<label for="end_date">End Date</label>
+<input
+ id="end_date"
+ name="end_date"
+ type="date"
+ value="2025-12-31"
+ required
+>
+</div>
+
+<div class="field">
+<label for="frequency">Data Frequency</label>
+
+<select id="frequency" name="frequency">
+<option value="monthly" selected>Monthly</option>
+<option value="daily">Daily</option>
+</select>
+</div>
+
+</div>
+
+<button id="analyzeButton" type="submit">
+Analyze Earth Science Trends
+</button>
+
+<div id="status" class="status" role="status" aria-live="polite"></div>
+
+</form>
+</section>
+
+
+<section id="resultSection" class="result">
+
+<div class="panel">
+<h2>Dataset Information</h2>
+<span id="sourceLabel" class="source"></span>
+<div id="datasetInfo" class="info-grid"></div>
+<div id="dataWarning"></div>
+</div>
+
+<div class="panel">
+<h2>Time-Series Visualization</h2>
+<iframe
+ id="chartFrame"
+ class="chart-frame"
+ title="Interactive time-series chart"
+ loading="lazy"
+></iframe>
+<div class="section-note">
+Use the Plotly toolbar to zoom, pan, and download the chart.
+</div>
+</div>
+
+<div class="panel">
+<h2>Statistical Analysis</h2>
+<div id="keyMetrics" class="metrics"></div>
+
+<h3>Detailed Statistical Results</h3>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Result</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody id="statisticsTable"></tbody>
+</table>
+</div>
+
+<div id="scientificCaution" class="warning-box"></div>
+</div>
+
+<div class="panel">
+<h2>Gemini AI Explanation</h2>
+<div id="aiStatus" class="section-note"></div>
+<div id="aiOutput" class="ai-text"></div>
+</div>
+
+<div class="panel">
+<h2>Scientific Report</h2>
+<p id="reportStatus" class="muted"></p>
+<a
+ id="reportLink"
+ class="link"
+ target="_blank"
+ rel="noopener"
+ style="display:none"
+>
+Open Scientific Report ↗
+</a>
+</div>
+
+</section>
+</main>
+
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+</body>
+</html>

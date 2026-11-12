@@ -1,15 +1,7 @@
-
-"""
+﻿"""
 TrendMatrix AI - Data Storage Service
 
-This module connects NASA POWER data retrieval, data processing,
-and SQLite storage.
-
-It provides functions to:
-1. Fetch a variable from NASA POWER.
-2. Clean and prepare the fetched observations.
-3. Save dataset metadata and observations in SQLite.
-4. Retrieve previously stored datasets.
+Connects NASA POWER data retrieval, processing, and SQLite storage.
 """
 
 from typing import Any, Optional
@@ -25,12 +17,11 @@ from database import (
     list_datasets,
 )
 
-from nasa_power import fetch_variable_data
-
+from services.nasa_power import fetch_variable_data
 from data_processor import prepare_time_series
 
 
-# NASA POWER currently supports these variables in our application.
+# NASA POWER variables currently supported by the application.
 NASA_POWER_VARIABLES = {
     "temperature",
     "humidity",
@@ -52,7 +43,7 @@ def _validate_request(
     end_date: str,
     region_name: str,
 ) -> None:
-    """Validate the inputs before requesting external data."""
+    """Validate request inputs before accessing external services."""
 
     if variable_id not in NASA_POWER_VARIABLES:
         raise ValueError(
@@ -77,12 +68,11 @@ def _validate_request(
         raise ValueError("Start date cannot be later than end date.")
 
 
-
 def _build_observation_records(
     dataframe: pd.DataFrame,
     variable_id: str,
 ) -> list[dict[str, Any]]:
-    """Convert a processed time series into database records."""
+    """Convert processed time-series values into database records."""
 
     if variable_id not in dataframe.columns:
         raise DataStorageError(
@@ -111,30 +101,6 @@ def _build_observation_records(
     return records
 
 
-    records = []
-
-    for observation_date, value in dataframe[variable_id].items():
-        if pd.isna(value):
-            continue
-
-        records.append(
-            {
-                "observation_date": pd.Timestamp(
-                    observation_date
-                ).strftime("%Y-%m-%d"),
-                "value": float(value),
-                "quality_flag": "valid",
-            }
-        )
-
-    if not records:
-        raise DataStorageError(
-            "No valid observations are available to save."
-        )
-
-    return records
-
-
 def fetch_and_store_dataset(
     variable_id: str,
     latitude: float,
@@ -147,17 +113,7 @@ def fetch_and_store_dataset(
     """
     Fetch NASA POWER observations, process them, and save them.
 
-    Args:
-        variable_id: TrendMatrix variable identifier.
-        latitude: Geographic latitude.
-        longitude: Geographic longitude.
-        start_date: Beginning date in YYYY-MM-DD format.
-        end_date: Ending date in YYYY-MM-DD format.
-        region_name: Human-readable name of the selected region.
-        frequency: Either 'daily' or 'monthly'.
-
-    Returns:
-        A dictionary containing the saved dataset ID and summary.
+    Returns a dictionary containing the saved dataset ID and summary.
     """
 
     _validate_request(
@@ -177,10 +133,10 @@ def fetch_and_store_dataset(
         )
 
     try:
-        # Ensure the SQLite tables exist before saving data.
+        # Ensure database tables exist.
         init_db()
 
-        # Step 1: Retrieve observations from NASA POWER.
+        # Retrieve observations from NASA POWER.
         raw_data = fetch_variable_data(
             variable_id=variable_id,
             latitude=latitude,
@@ -194,11 +150,10 @@ def fetch_and_store_dataset(
                 "NASA POWER returned no observations for this request."
             )
 
-        # Preserve the source metadata before processing.
+        # Preserve source metadata before processing.
         source_metadata = dict(raw_data.attrs)
 
-        # Step 2: Clean the observations and prepare the requested
-        # daily or monthly time series.
+        # Clean and prepare daily or monthly observations.
         processed_data = prepare_time_series(
             raw_data,
             frequency=frequency,
@@ -210,7 +165,7 @@ def fetch_and_store_dataset(
                 "No valid observations remained after processing."
             )
 
-        # Step 3: Build the dataset metadata for SQLite.
+        # Read the variable's unit from NASA metadata.
         unit = source_metadata.get("units", {}).get(
             variable_id,
             "Unknown",
@@ -219,17 +174,14 @@ def fetch_and_store_dataset(
         if frequency == "monthly" and variable_id == "precipitation":
             unit = "mm/month"
 
+        # Prepare dataset metadata.
         dataset_metadata = {
             "variable_name": variable_id,
             "variable_code": variable_id,
             "data_source": "NASA POWER",
             "region_name": region_name.strip(),
-            "start_date": processed_data.index.min().strftime(
-                "%Y-%m-%d"
-            ),
-            "end_date": processed_data.index.max().strftime(
-                "%Y-%m-%d"
-            ),
+            "start_date": processed_data.index.min().strftime("%Y-%m-%d"),
+            "end_date": processed_data.index.max().strftime("%Y-%m-%d"),
             "frequency": frequency,
             "description": (
                 f"{variable_id.replace('_', ' ').title()} observations "
@@ -253,16 +205,16 @@ def fetch_and_store_dataset(
             },
         }
 
-        # Step 4: Save the dataset metadata and get its database ID.
+        # Save dataset metadata.
         dataset_id = save_dataset(dataset_metadata)
 
-        # Step 5: Convert processed values into observation records.
+        # Convert observations into database records.
         observation_records = _build_observation_records(
             processed_data,
             variable_id,
         )
 
-        # Step 6: Save the observations against the dataset ID.
+        # Save observations against the dataset ID.
         saved_count = save_observations(
             dataset_id,
             observation_records,
@@ -280,7 +232,9 @@ def fetch_and_store_dataset(
             "observations_saved": saved_count,
             "start_date": dataset_metadata["start_date"],
             "end_date": dataset_metadata["end_date"],
-            "message": "Dataset fetched, processed, and saved successfully.",
+            "message": (
+                "Dataset fetched, processed, and saved successfully."
+            ),
         }
 
     except (ValueError, DataStorageError):
@@ -292,8 +246,10 @@ def fetch_and_store_dataset(
         ) from error
 
 
-def get_stored_dataset(dataset_id: int) -> Optional[dict[str, Any]]:
-    """Retrieve dataset metadata and its observations from SQLite."""
+def get_stored_dataset(
+    dataset_id: int,
+) -> Optional[dict[str, Any]]:
+    """Retrieve dataset metadata and observations from SQLite."""
 
     init_db()
 
@@ -314,7 +270,7 @@ def get_available_datasets(
     variable_name: Optional[str] = None,
     region_name: Optional[str] = None,
 ) -> list[dict[str, Any]]:
-    """List saved datasets, optionally filtered by variable or region."""
+    """List saved datasets with optional filters."""
 
     init_db()
 
@@ -328,7 +284,7 @@ if __name__ == "__main__":
     print("TRENDMATRIX AI - DATA STORAGE SERVICE")
     print("=" * 45)
 
-    # Initialize the database without making an external API request.
+    # Initialize SQLite without making an external API request.
     init_db()
 
     print("Database connection: Ready")

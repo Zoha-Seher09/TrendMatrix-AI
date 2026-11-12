@@ -1,16 +1,15 @@
-
-"""
+﻿"""
 TrendMatrix AI - NASA POWER Data Service
 
-Fetches daily point-based meteorological and solar observations
+Retrieves daily point-based meteorological and solar observations
 from the official NASA POWER API.
 
 Important:
-- Retrieves point data, not a regional spatial average.
-- Uses NASA response metadata for units when available.
-- Uses a verified parameter-unit mapping as a fallback.
-- Converts NASA's missing-value marker (-999) to NaN.
-- GLDAS and MODIS variables require separate data services.
+- Retrieves point data, not regional spatial averages.
+- Preserves NASA response metadata and units.
+- Converts NASA missing-value markers to NaN.
+- Does not generate or interpolate missing observations.
+- GLDAS and MODIS variables require separate services.
 """
 
 from datetime import datetime
@@ -22,9 +21,9 @@ import requests
 from config import NASA_POWER_BASE_URL, NASA_REQUEST_TIMEOUT
 
 
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 # NASA POWER configuration
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 
 NASA_POWER_DAILY_ENDPOINT = (
     f"{NASA_POWER_BASE_URL.rstrip('/')}/daily/point"
@@ -40,8 +39,6 @@ POWER_VARIABLES = {
     "solar_radiation": "ALLSKY_SFC_SW_DWN",
 }
 
-# Verified fallback units for the selected NASA POWER parameters.
-# The API response metadata takes priority when it provides units.
 POWER_UNITS = {
     "T2M": "°C",
     "RH2M": "%",
@@ -58,12 +55,21 @@ class NASAAPIError(Exception):
     """Raised when NASA POWER returns an invalid or unsuccessful response."""
 
 
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 # Input validation
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 
-def _validate_coordinates(latitude: float, longitude: float) -> None:
+def _validate_coordinates(
+    latitude: float,
+    longitude: float,
+) -> None:
     """Validate geographic coordinates."""
+
+    try:
+        latitude = float(latitude)
+        longitude = float(longitude)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Coordinates must be numeric.") from error
 
     if not -90 <= latitude <= 90:
         raise ValueError("Latitude must be between -90 and 90.")
@@ -82,7 +88,10 @@ def _format_date(date_value) -> str:
 
     for date_format in ("%Y-%m-%d", "%Y%m%d"):
         try:
-            parsed_date = datetime.strptime(date_text, date_format)
+            parsed_date = datetime.strptime(
+                date_text,
+                date_format,
+            )
             return parsed_date.strftime("%Y%m%d")
         except ValueError:
             continue
@@ -93,7 +102,10 @@ def _format_date(date_value) -> str:
     )
 
 
-def _validate_date_range(start_date, end_date) -> tuple:
+def _validate_date_range(
+    start_date,
+    end_date,
+) -> tuple[str, str]:
     """Validate and format the requested date range."""
 
     formatted_start = _format_date(start_date)
@@ -105,8 +117,10 @@ def _validate_date_range(start_date, end_date) -> tuple:
     return formatted_start, formatted_end
 
 
-def _resolve_variables(variable_ids: Iterable[str]) -> dict:
-    """Convert TrendMatrix variable IDs into NASA POWER parameter codes."""
+def _resolve_variables(
+    variable_ids: Iterable[str],
+) -> dict[str, str]:
+    """Convert TrendMatrix variable IDs into NASA parameter codes."""
 
     if isinstance(variable_ids, str):
         variable_ids = [variable_ids]
@@ -120,12 +134,17 @@ def _resolve_variables(variable_ids: Iterable[str]) -> dict:
 
     for variable_id in variable_ids:
 
+        if not isinstance(variable_id, str):
+            raise ValueError("Variable identifiers must be strings.")
+
+        variable_id = variable_id.strip()
+
         if variable_id not in POWER_VARIABLES:
             supported = ", ".join(POWER_VARIABLES.keys())
 
             raise ValueError(
-                f"'{variable_id}' is not supported by NASA POWER "
-                f"in this module. Supported variables: {supported}"
+                f"'{variable_id}' is not supported by NASA POWER. "
+                f"Supported variables: {supported}"
             )
 
         selected_parameters[variable_id] = POWER_VARIABLES[variable_id]
@@ -133,16 +152,12 @@ def _resolve_variables(variable_ids: Iterable[str]) -> dict:
     return selected_parameters
 
 
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 # NASA POWER response processing
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 
 def _extract_parameter_units(response_data: dict) -> dict:
-    """
-    Extract units from NASA POWER response metadata.
-
-    Handles dictionary and list metadata structures.
-    """
+    """Extract parameter units from NASA response metadata."""
 
     units = {}
 
@@ -151,7 +166,10 @@ def _extract_parameter_units(response_data: dict) -> dict:
     if not isinstance(header, dict):
         return units
 
-    parameter_information = header.get("parameter_information", [])
+    parameter_information = header.get(
+        "parameter_information",
+        [],
+    )
 
     if isinstance(parameter_information, dict):
 
@@ -181,11 +199,9 @@ def _extract_parameter_units(response_data: dict) -> dict:
 
 def _get_parameter_units(
     parameter_code: str,
-    api_units: dict
+    api_units: dict,
 ) -> str:
-    """
-    Return API-provided units or use the verified fallback mapping.
-    """
+    """Use API-provided units or the verified fallback mapping."""
 
     api_unit = api_units.get(parameter_code)
 
@@ -203,10 +219,14 @@ def _process_response(
     start_date: str,
     end_date: str,
 ) -> pd.DataFrame:
-    """Convert the NASA POWER JSON response into a clean DataFrame."""
+    """Convert NASA POWER JSON observations into a DataFrame."""
+
+    if not isinstance(response_data, dict):
+        raise NASAAPIError("Invalid NASA POWER response format.")
 
     try:
-        parameter_data = response_data["properties"]["parameter"]
+        properties = response_data["properties"]
+        parameter_data = properties["parameter"]
 
     except (KeyError, TypeError):
         raise NASAAPIError(
@@ -235,21 +255,49 @@ def _process_response(
                 f"Invalid observation format for {parameter_code}."
             )
 
-        series = pd.Series(observations, name=variable_id)
+        series = pd.Series(
+            observations,
+            name=variable_id,
+        )
 
+        # Convert observation dates into a DatetimeIndex.
         series.index = pd.to_datetime(
             series.index,
             format="%Y%m%d",
-            errors="coerce"
+            errors="coerce",
         )
 
-        series = pd.to_numeric(series, errors="coerce")
+        # Convert observation values into numeric data.
+        series = pd.to_numeric(
+            series,
+            errors="coerce",
+        )
 
-        # Replace NASA's missing-value marker.
-        series = series.replace(MISSING_VALUE, float("nan"))
+        # Replace NASA missing-value markers.
+        series = series.replace(
+            MISSING_VALUE,
+            float("nan"),
+        )
 
-        # Remove invalid dates.
+        # Remove invalid dates and sort observations.
         series = series[~series.index.isna()]
+        series = series.sort_index()
+
+        # Keep only the requested date range.
+        start_timestamp = pd.to_datetime(
+            start_date,
+            format="%Y%m%d",
+        )
+
+        end_timestamp = pd.to_datetime(
+            end_date,
+            format="%Y%m%d",
+        )
+
+        series = series.loc[
+            (series.index >= start_timestamp)
+            & (series.index <= end_timestamp)
+        ]
 
         dataframe_columns[variable_id] = series
 
@@ -267,21 +315,23 @@ def _process_response(
             "for the selected location and dates."
         )
 
-    # Attach metadata for downstream processing.
+    # Preserve metadata for downstream processing.
     dataframe.attrs["source"] = "NASA POWER"
     dataframe.attrs["data_type"] = "live_nasa"
     dataframe.attrs["spatial_type"] = "point"
-    dataframe.attrs["latitude"] = latitude
-    dataframe.attrs["longitude"] = longitude
+    dataframe.attrs["latitude"] = float(latitude)
+    dataframe.attrs["longitude"] = float(longitude)
     dataframe.attrs["start_date"] = start_date
     dataframe.attrs["end_date"] = end_date
     dataframe.attrs["frequency"] = "daily"
     dataframe.attrs["community"] = NASA_POWER_COMMUNITY
 
+    dataframe.attrs["parameter_codes"] = dict(selected_variables)
+
     dataframe.attrs["units"] = {
         variable_id: _get_parameter_units(
             parameter_code,
-            api_units
+            api_units,
         )
         for variable_id, parameter_code in selected_variables.items()
     }
@@ -289,9 +339,9 @@ def _process_response(
     return dataframe
 
 
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 # Main NASA POWER API function
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 
 def fetch_daily_data(
     latitude: float,
@@ -304,24 +354,14 @@ def fetch_daily_data(
     """
     Fetch daily NASA POWER observations for one geographic point.
 
-    Args:
-        latitude: Geographic latitude (-90 to 90).
-        longitude: Geographic longitude (-180 to 180).
-        start_date: Starting date (YYYY-MM-DD or YYYYMMDD).
-        end_date: Ending date (YYYY-MM-DD or YYYYMMDD).
-        variable_ids: List of TrendMatrix variable IDs.
-        community: NASA POWER user community.
-
-    Returns:
-        pandas.DataFrame:
-            Daily observations indexed by date.
+    Returns a DataFrame indexed by observation date.
     """
 
     _validate_coordinates(latitude, longitude)
 
     formatted_start, formatted_end = _validate_date_range(
         start_date,
-        end_date
+        end_date,
     )
 
     if variable_ids is None:
@@ -329,13 +369,16 @@ def fetch_daily_data(
 
     selected_variables = _resolve_variables(variable_ids)
 
+    if not isinstance(community, str) or not community.strip():
+        raise ValueError("A valid NASA POWER community is required.")
+
     parameter_codes = ",".join(selected_variables.values())
 
     request_parameters = {
         "parameters": parameter_codes,
-        "community": community,
-        "longitude": longitude,
-        "latitude": latitude,
+        "community": community.strip(),
+        "longitude": float(longitude),
+        "latitude": float(latitude),
         "start": formatted_start,
         "end": formatted_end,
         "format": "JSON",
@@ -365,7 +408,7 @@ def fetch_daily_data(
 
         raise NASAAPIError(
             f"NASA POWER HTTP error {response.status_code}: "
-            f"{error_details}"
+            f"{str(error_details)[:500]}"
         ) from error
 
     except requests.exceptions.RequestException as error:
@@ -388,7 +431,7 @@ def fetch_daily_data(
 
     if messages:
         raise NASAAPIError(
-            f"NASA POWER message: {messages}"
+            f"NASA POWER message: {str(messages)[:500]}"
         )
 
     return _process_response(
@@ -401,9 +444,9 @@ def fetch_daily_data(
     )
 
 
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 # Single-variable helper
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
 
 def fetch_variable_data(
     variable_id: str,
@@ -412,7 +455,7 @@ def fetch_variable_data(
     start_date: str,
     end_date: str,
 ) -> pd.DataFrame:
-    """Fetch daily observations for one supported NASA POWER variable."""
+    """Fetch daily observations for one supported variable."""
 
     return fetch_daily_data(
         latitude=latitude,
@@ -423,9 +466,9 @@ def fetch_variable_data(
     )
 
 
-# ---------------------------------------------------------------------
-# Basic module test
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------
+# Live API test
+# ---------------------------------------------------------
 
 if __name__ == "__main__":
 
@@ -476,3 +519,4 @@ if __name__ == "__main__":
     except (NASAAPIError, ValueError) as error:
         print("\nNASA POWER test failed.")
         print("Reason:", error)
+        raise

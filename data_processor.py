@@ -1,5 +1,4 @@
-
-"""
+﻿"""
 TrendMatrix AI - Data Processing Module
 
 Cleans and prepares Earth science observations for analysis.
@@ -10,28 +9,22 @@ Features:
 - Handles invalid dates and missing values.
 - Detects duplicate dates.
 - Aggregates daily observations into monthly time series.
+- Tracks monthly observation coverage.
 - Preserves source and location metadata.
 - Generates data quality reports.
 
 Scientific note:
 Missing observations are not automatically interpolated.
 Outliers are not automatically removed.
+Incomplete monthly coverage is reported explicitly.
 """
 
 import numpy as np
 import pandas as pd
 
 
-# ---------------------------------------------------------------------
-# Processing configuration
-# ---------------------------------------------------------------------
-
 DEFAULT_ACCUMULATION_VARIABLES = ("precipitation",)
 
-
-# ---------------------------------------------------------------------
-# Input validation
-# ---------------------------------------------------------------------
 
 def validate_dataframe(dataframe: pd.DataFrame) -> None:
     """Validate the basic structure of an observation DataFrame."""
@@ -51,10 +44,7 @@ def validate_dataframe(dataframe: pd.DataFrame) -> None:
         )
 
     if dataframe.index.has_duplicates:
-        raise ValueError(
-            "Duplicate observation dates were found. "
-            "Resolve duplicates before processing."
-        )
+        raise ValueError("Duplicate observation dates were found.")
 
     if not dataframe.index.is_monotonic_increasing:
         raise ValueError(
@@ -62,16 +52,8 @@ def validate_dataframe(dataframe: pd.DataFrame) -> None:
         )
 
 
-# ---------------------------------------------------------------------
-# Data quality reporting
-# ---------------------------------------------------------------------
-
 def get_quality_report(dataframe: pd.DataFrame) -> dict:
-    """
-    Generate a data quality report.
-
-    Reports missing values without modifying the observations.
-    """
+    """Generate a report of missing and complete observations."""
 
     if not isinstance(dataframe, pd.DataFrame):
         raise TypeError("Input must be a pandas DataFrame.")
@@ -102,25 +84,16 @@ def get_quality_report(dataframe: pd.DataFrame) -> dict:
     }
 
 
-# ---------------------------------------------------------------------
-# Data cleaning
-# ---------------------------------------------------------------------
-
 def clean_observations(
     dataframe: pd.DataFrame,
     drop_empty_rows: bool = True,
 ) -> pd.DataFrame:
     """
-    Clean observations while preserving valid scientific information.
+    Clean observations without inventing missing scientific values.
 
-    Processing:
-    1. Validate the input.
-    2. Convert the index to datetime if necessary.
-    3. Convert variable values to numeric.
-    4. Replace infinite values with NaN.
-    5. Optionally remove rows where every variable is missing.
-
-    Missing values in partially complete rows are retained.
+    Converts dates and numeric values, replaces infinite values
+    with NaN, sorts dates, and optionally removes completely
+    empty rows.
     """
 
     if not isinstance(dataframe, pd.DataFrame):
@@ -129,47 +102,39 @@ def clean_observations(
     if dataframe.empty:
         raise ValueError("Cannot clean an empty DataFrame.")
 
-    result = dataframe.copy()
+    if dataframe.columns.empty:
+        raise ValueError("The DataFrame has no variables.")
 
-    # Preserve source and dataset metadata.
+    result = dataframe.copy()
     metadata = dict(dataframe.attrs)
 
-    # Convert the index to datetime when required.
     if not isinstance(result.index, pd.DatetimeIndex):
-
         try:
             result.index = pd.to_datetime(
                 result.index,
-                errors="raise"
+                errors="raise",
             )
-
         except (ValueError, TypeError) as error:
             raise ValueError(
                 "Observation index contains invalid dates."
             ) from error
 
     if result.index.has_duplicates:
-        raise ValueError(
-            "Duplicate observation dates were found."
-        )
+        raise ValueError("Duplicate observation dates were found.")
 
-    # Sort observations chronologically.
     result = result.sort_index()
 
-    # Convert all observation columns to numeric values.
     for column in result.columns:
-
         result[column] = pd.to_numeric(
             result[column],
-            errors="coerce"
+            errors="coerce",
         )
 
         result[column] = result[column].replace(
             [np.inf, -np.inf],
-            np.nan
+            np.nan,
         )
 
-    # Remove only rows where all selected variables are missing.
     if drop_empty_rows:
         result = result.dropna(how="all")
 
@@ -180,16 +145,11 @@ def clean_observations(
 
     result.index.name = "date"
 
-    # Restore metadata and attach a quality report.
     result.attrs = metadata
     result.attrs["quality_report"] = get_quality_report(result)
 
     return result
 
-
-# ---------------------------------------------------------------------
-# Monthly aggregation
-# ---------------------------------------------------------------------
 
 def aggregate_monthly(
     dataframe: pd.DataFrame,
@@ -198,11 +158,14 @@ def aggregate_monthly(
     """
     Aggregate daily observations into monthly observations.
 
-    Aggregation rules:
-    - Precipitation: sum daily values to calculate monthly totals.
-    - Other variables: calculate monthly daily averages.
+    Accumulation variables:
+        Sum available daily values.
 
-    Missing observations are not filled with invented values.
+    Other variables:
+        Calculate the average of available daily values.
+
+    Monthly coverage is recorded separately for every variable.
+    Missing days are never filled with invented observations.
     """
 
     cleaned = clean_observations(dataframe)
@@ -210,35 +173,53 @@ def aggregate_monthly(
     if accumulation_variables is None:
         accumulation_variables = DEFAULT_ACCUMULATION_VARIABLES
 
+    if isinstance(accumulation_variables, str):
+        accumulation_variables = [accumulation_variables]
+
     accumulation_variables = set(accumulation_variables)
 
     monthly_columns = {}
+    monthly_coverage = {}
 
     for column in cleaned.columns:
 
+        grouped = cleaned[column].resample("MS")
+
         if column in accumulation_variables:
-
-            # Sum available daily accumulation values.
-            monthly_columns[column] = (
-                cleaned[column]
-                .resample("MS")
-                .sum(min_count=1)
-            )
-
+            monthly_values = grouped.sum(min_count=1)
+            aggregation_method = "sum"
         else:
+            monthly_values = grouped.mean()
+            aggregation_method = "mean"
 
-            # Calculate the average of available daily values.
-            monthly_columns[column] = (
-                cleaned[column]
-                .resample("MS")
-                .mean()
-            )
+        monthly_columns[column] = monthly_values
+
+        valid_counts = grouped.count()
+
+        coverage_records = []
+
+        for month, valid_days in valid_counts.items():
+            expected_days = int(month.days_in_month)
+
+            coverage_records.append({
+                "month": month.strftime("%Y-%m"),
+                "valid_observations": int(valid_days),
+                "expected_calendar_days": expected_days,
+                "coverage_percent": round(
+                    (int(valid_days) / expected_days) * 100,
+                    2,
+                ),
+            })
+
+        monthly_coverage[column] = {
+            "aggregation": aggregation_method,
+            "months": coverage_records,
+        }
 
     monthly_dataframe = pd.DataFrame(monthly_columns)
 
     monthly_dataframe.index.name = "date"
 
-    # Remove months where all selected variables are missing.
     monthly_dataframe = monthly_dataframe.dropna(how="all")
 
     if monthly_dataframe.empty:
@@ -246,10 +227,10 @@ def aggregate_monthly(
             "Monthly aggregation produced no valid observations."
         )
 
-    # Preserve the original dataset metadata.
     monthly_dataframe.attrs = dict(cleaned.attrs)
 
     monthly_dataframe.attrs["frequency"] = "monthly"
+
     monthly_dataframe.attrs["aggregation"] = {
         column: (
             "sum"
@@ -259,14 +240,14 @@ def aggregate_monthly(
         for column in cleaned.columns
     }
 
-    # Update precipitation units after monthly accumulation.
+    monthly_dataframe.attrs["monthly_coverage"] = monthly_coverage
+
     units = dict(monthly_dataframe.attrs.get("units", {}))
 
     for column in accumulation_variables:
-
         if column in monthly_dataframe.columns:
             if units.get(column) == "mm/day":
-                units[column] = "mm/month"
+                units[column] = "mm (monthly accumulation; check coverage)"
 
     if units:
         monthly_dataframe.attrs["units"] = units
@@ -278,10 +259,6 @@ def aggregate_monthly(
     return monthly_dataframe
 
 
-# ---------------------------------------------------------------------
-# Main processing function
-# ---------------------------------------------------------------------
-
 def prepare_time_series(
     dataframe: pd.DataFrame,
     frequency: str = "daily",
@@ -290,22 +267,20 @@ def prepare_time_series(
     """
     Prepare observations at the requested frequency.
 
-    Supported frequencies:
-    - daily
-    - monthly
+    Supported frequencies: daily and monthly.
     """
+
+    if not isinstance(frequency, str):
+        raise TypeError("Frequency must be a string.")
 
     normalized_frequency = frequency.strip().lower()
 
     if normalized_frequency == "daily":
-
         result = clean_observations(dataframe)
         result.attrs["frequency"] = "daily"
-
         return result
 
     if normalized_frequency == "monthly":
-
         return aggregate_monthly(
             dataframe,
             accumulation_variables=accumulation_variables,
@@ -316,18 +291,12 @@ def prepare_time_series(
     )
 
 
-# ---------------------------------------------------------------------
-# Offline module test
-# ---------------------------------------------------------------------
-
 if __name__ == "__main__":
 
     print("\nTRENDMATRIX AI - DATA PROCESSING TEST")
     print("=" * 55)
 
-    # Create a small demonstration dataset.
-    # This is synthetic test data, not NASA observations.
-
+    # Synthetic data for testing only, not NASA observations.
     sample_dates = pd.date_range(
         start="2020-01-01",
         periods=10,
@@ -363,8 +332,7 @@ if __name__ == "__main__":
     }
 
     try:
-
-        print("\n1. Testing daily data cleaning...")
+        print("\n1. Testing daily processing...")
 
         daily_data = prepare_time_series(
             sample_dataframe,
@@ -384,17 +352,19 @@ if __name__ == "__main__":
         print("Monthly aggregation successful.")
         print(monthly_data)
 
-        print("\n3. Testing data quality report...")
+        print("\n3. Testing quality report...")
 
         quality_report = get_quality_report(daily_data)
 
-        print("Total observations:")
-        print(quality_report["total_observations"])
+        print(quality_report)
 
-        print("\nMissing values:")
-        print(quality_report["missing_values"])
+        print("\n4. Testing monthly coverage...")
 
-        print("\n4. Testing metadata preservation...")
+        print(
+            monthly_data.attrs["monthly_coverage"]
+        )
+
+        print("\n5. Testing metadata preservation...")
 
         print("Source:", monthly_data.attrs["source"])
         print("Frequency:", monthly_data.attrs["frequency"])
@@ -403,6 +373,7 @@ if __name__ == "__main__":
         print("\nData processing module tested successfully.")
 
     except (ValueError, TypeError) as error:
-
         print("\nData processing test failed.")
         print("Reason:", error)
+        raise
+

@@ -1,17 +1,17 @@
-
-"""
+﻿"""
 TrendMatrix AI - Offline Data Manager
 
-This module provides access to previously cached NASA observations
-and generates clearly labelled synthetic demo data when no cached
-dataset is available.
+Loads previously cached NASA POWER observations or generates
+clearly labelled synthetic demonstration data.
 
-Important:
-- Cached NASA data is previously downloaded real NASA data.
-- Sample/demo data is synthetic and is never presented as NASA data.
-- This module does not require an internet connection.
+Cached NASA observations and synthetic demo data are kept separate.
+Cached records are checked for source, variable, region, frequency,
+and coordinates when coordinates are supplied.
 """
 
+import json
+import logging
+import math
 from typing import Any, Optional
 
 import numpy as np
@@ -23,11 +23,13 @@ from data_storage import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 class OfflineDataError(Exception):
     """Raised when offline data cannot be prepared."""
 
 
-# Default units used when generating synthetic demonstration data.
 VARIABLE_UNITS = {
     "temperature": "°C",
     "humidity": "%",
@@ -39,8 +41,8 @@ VARIABLE_UNITS = {
     "solar_radiation": "kWh/m²/day",
 }
 
-# Approximate starting values and trends for illustrative demo data.
-# These values are synthetic and are not scientific observations.
+
+# These settings are only for illustrative synthetic data.
 SAMPLE_VARIABLE_SETTINGS = {
     "temperature": {"base": 18.0, "trend": 0.025, "season": 8.0},
     "humidity": {"base": 60.0, "trend": -0.03, "season": 10.0},
@@ -57,7 +59,7 @@ def _to_dict(record: Any) -> dict:
     """Convert SQLite rows or dictionary-like records to dictionaries."""
 
     if isinstance(record, dict):
-        return record
+        return dict(record)
 
     if hasattr(record, "keys"):
         return {key: record[key] for key in record.keys()}
@@ -67,24 +69,95 @@ def _to_dict(record: Any) -> dict:
     )
 
 
-def _get_dataset_variable(dataset: dict) -> Optional[str]:
-    """Read the variable identifier from dataset metadata."""
+def _normalise_text(value: Any) -> str:
+    """Return normalized text for reliable metadata comparisons."""
+
+    return str(value or "").strip().casefold()
+
+
+def _coordinates_match(
+    stored_value: Any,
+    requested_value: Optional[float],
+    tolerance: float = 0.0001,
+) -> bool:
+    """Compare stored and requested coordinates."""
+
+    if requested_value is None:
+        return True
+
+    if stored_value is None:
+        return False
+
+    try:
+        stored_number = float(stored_value)
+        requested_number = float(requested_value)
+
+        return (
+            math.isfinite(stored_number)
+            and math.isfinite(requested_number)
+            and math.isclose(
+                stored_number,
+                requested_number,
+                rel_tol=0,
+                abs_tol=tolerance,
+            )
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+def _read_nested_metadata(dataset: dict) -> dict:
+    """Decode the JSON metadata stored in the database."""
+
+    raw_metadata = dataset.get("metadata_json")
+
+    if not raw_metadata:
+        return {}
+
+    if isinstance(raw_metadata, dict):
+        return raw_metadata
+
+    try:
+        decoded = json.loads(raw_metadata)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        logger.warning("Could not decode cached dataset metadata.")
+        return {}
+
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def _is_real_nasa_dataset(dataset: dict) -> bool:
+    """Reject synthetic and non-NASA database records."""
+
+    if dataset.get("is_sample"):
+        return False
+
+    data_type = _normalise_text(dataset.get("data_type"))
+    data_source = _normalise_text(dataset.get("data_source"))
+
+    if data_type in {"sample", "sample_demo", "synthetic"}:
+        return False
 
     return (
-        dataset.get("variable_name")
-        or dataset.get("variable_code")
-        or dataset.get("variable")
+        data_type in {"live_nasa", "nasa"}
+        or data_source == "nasa power"
     )
 
 
 def get_cached_dataset(
     variable_id: str,
     region_name: Optional[str] = None,
+    frequency: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> Optional[dict]:
     """
-    Retrieve a previously saved NASA dataset.
+    Retrieve the newest compatible cached NASA dataset.
 
-    Returns None when no matching cached NASA dataset is found.
+    A dataset must match the requested variable and region.
+    Frequency and coordinates are also checked when supplied.
+
+    No fallback to another region is allowed.
     """
 
     datasets = get_available_datasets(
@@ -92,25 +165,68 @@ def get_cached_dataset(
         region_name=region_name,
     )
 
-    # If no region-specific match exists, try any cached region
-    # for the requested variable.
-    if not datasets and region_name:
-        datasets = get_available_datasets(
-            variable_name=variable_id
-        )
-
     if not datasets:
         return None
 
-    # Prefer real NASA datasets rather than sample/demo records.
-    for record in reversed(datasets):
-        dataset = _to_dict(record)
+    # The database normally returns newest-first records.
+    # Sorting explicitly avoids relying on the database ordering.
+    datasets = sorted(
+        [_to_dict(record) for record in datasets],
+        key=lambda item: str(item.get("fetched_at") or ""),
+        reverse=True,
+    )
 
-        is_sample = dataset.get("is_sample", False)
-        data_type = dataset.get("data_type", "")
+    requested_region = _normalise_text(region_name)
+    requested_frequency = _normalise_text(frequency)
 
-        if is_sample or data_type in {"sample_demo", "sample"}:
+    for dataset in datasets:
+
+        if not _is_real_nasa_dataset(dataset):
             continue
+
+        if _normalise_text(
+            dataset.get("variable_name")
+        ) != _normalise_text(variable_id):
+            continue
+
+        # Never use cached observations from a different region.
+        if requested_region:
+            cached_region = _normalise_text(
+                dataset.get("region_name")
+            )
+
+            if cached_region != requested_region:
+                continue
+
+        # Never substitute daily data for monthly requests,
+        # or monthly data for daily requests.
+        if requested_frequency:
+            cached_frequency = _normalise_text(
+                dataset.get("frequency")
+            )
+
+            if cached_frequency != requested_frequency:
+                continue
+
+        # Coordinates must be supplied together.
+        if (latitude is None) != (longitude is None):
+            raise ValueError(
+                "Latitude and longitude must be supplied together."
+            )
+
+        if latitude is not None and longitude is not None:
+
+            if not _coordinates_match(
+                dataset.get("latitude"),
+                latitude,
+            ):
+                continue
+
+            if not _coordinates_match(
+                dataset.get("longitude"),
+                longitude,
+            ):
+                continue
 
         dataset_id = dataset.get("id", dataset.get("dataset_id"))
 
@@ -122,24 +238,30 @@ def get_cached_dataset(
         if not stored:
             continue
 
-        metadata = _to_dict(stored["dataset"])
-        observations = stored["observations"]
+        stored_dataset = _to_dict(stored["dataset"])
+
+        if not _is_real_nasa_dataset(stored_dataset):
+            continue
+
+        observations = stored.get("observations")
 
         if not observations:
             continue
 
-        rows = [_to_dict(item) for item in observations]
-        observations_df = pd.DataFrame(rows)
-
-        date_column = (
-            "date" if "date" in observations_df.columns
-            else "observation_date"
+        observations_df = pd.DataFrame(
+            [_to_dict(item) for item in observations]
         )
 
-        if date_column not in observations_df.columns:
-            continue
+        date_column = (
+            "observation_date"
+            if "observation_date" in observations_df.columns
+            else "date"
+        )
 
-        if "value" not in observations_df.columns:
+        if (
+            date_column not in observations_df.columns
+            or "value" not in observations_df.columns
+        ):
             continue
 
         observations_df[date_column] = pd.to_datetime(
@@ -152,6 +274,11 @@ def get_cached_dataset(
             errors="coerce",
         )
 
+        observations_df = observations_df.replace(
+            [np.inf, -np.inf],
+            np.nan,
+        )
+
         observations_df = observations_df.dropna(
             subset=[date_column, "value"]
         )
@@ -159,23 +286,44 @@ def get_cached_dataset(
         if observations_df.empty:
             continue
 
-        observations_df = observations_df.sort_values(date_column)
+        observations_df = observations_df.sort_values(
+            date_column
+        )
 
-        dataframe = observations_df.set_index(date_column)[
-            ["value"]
-        ].rename(columns={"value": variable_id})
+        dataframe = observations_df.set_index(
+            date_column
+        )[["value"]].rename(
+            columns={"value": variable_id}
+        )
 
+        # Merge database columns and decoded source metadata.
+        metadata = dict(stored_dataset)
+        nested_metadata = _read_nested_metadata(stored_dataset)
+
+        metadata["source_metadata"] = nested_metadata
+
+        metadata["spatial_type"] = nested_metadata.get(
+            "spatial_type",
+            "point",
+        )
+
+        metadata["region"] = stored_dataset.get("region_name")
         metadata["data_type"] = "cached_nasa"
-        metadata["source_label"] = "Cached NASA Data"
+        metadata["source_label"] = "Cached NASA POWER Data"
         metadata["is_sample"] = False
+
+        dataframe.attrs.update(metadata)
 
         return {
             "success": True,
             "data": dataframe,
             "metadata": metadata,
             "data_type": "cached_nasa",
-            "source_label": "Cached NASA Data",
-            "message": "Previously downloaded NASA observations loaded successfully.",
+            "source_label": "Cached NASA POWER Data",
+            "message": (
+                "Previously downloaded NASA POWER observations "
+                "loaded successfully."
+            ),
         }
 
     return None
@@ -185,12 +333,15 @@ def generate_sample_dataset(
     variable_id: str,
     years: int = 10,
     frequency: str = "monthly",
+    region_name: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> dict:
     """
-    Generate synthetic time-series data for demonstration purposes.
+    Generate synthetic demonstration data.
 
-    The generated values are illustrative only and must never be
-    interpreted as actual NASA measurements.
+    These values are illustrative only. They are not NASA
+    measurements and must not be treated as scientific evidence.
     """
 
     if variable_id not in SAMPLE_VARIABLE_SETTINGS:
@@ -198,10 +349,16 @@ def generate_sample_dataset(
             f"Unsupported sample variable: {variable_id}"
         )
 
-    if years < 1 or years > 100:
-        raise ValueError("Years must be between 1 and 100.")
+    if (
+        isinstance(years, bool)
+        or not isinstance(years, int)
+        or not 1 <= years <= 100
+    ):
+        raise ValueError(
+            "Years must be an integer between 1 and 100."
+        )
 
-    frequency = frequency.lower().strip()
+    frequency = str(frequency).lower().strip()
 
     if frequency not in {"monthly", "daily"}:
         raise ValueError(
@@ -217,9 +374,11 @@ def generate_sample_dataset(
             freq="MS",
         )
     else:
+        start_date = end_date - pd.DateOffset(years=years) + pd.Timedelta(days=1)
+
         dates = pd.date_range(
+            start=start_date,
             end=end_date,
-            periods=years * 365,
             freq="D",
         )
 
@@ -228,11 +387,10 @@ def generate_sample_dataset(
 
     time_index = np.arange(len(dates), dtype=float)
 
-    # Apply a small illustrative trend over the generated time period.
     trend = settings["trend"] * time_index
 
-    # Generate a repeating seasonal pattern.
     seasonal_period = 12 if frequency == "monthly" else 365
+
     seasonal = settings["season"] * np.sin(
         2 * np.pi * time_index / seasonal_period
     )
@@ -250,7 +408,6 @@ def generate_sample_dataset(
 
     values = settings["base"] + trend + seasonal + noise
 
-    # Apply reasonable display bounds to selected variables.
     if variable_id == "humidity":
         values = np.clip(values, 0, 100)
 
@@ -277,14 +434,22 @@ def generate_sample_dataset(
         "variable_name": variable_id,
         "unit": VARIABLE_UNITS[variable_id],
         "frequency": frequency,
+        "region": region_name,
+        "region_name": region_name,
+        "latitude": latitude,
+        "longitude": longitude,
         "data_type": "sample_demo",
         "source_label": "Synthetic Demo Data",
         "is_sample": True,
+        "spatial_type": "synthetic",
         "description": (
-            "Synthetic demonstration data generated by TrendMatrix AI. "
-            "These values are not actual NASA observations."
+            "Synthetic demonstration data generated by "
+            "TrendMatrix AI. These values are not actual "
+            "NASA observations and are not scientific evidence."
         ),
     }
+
+    dataframe.attrs.update(metadata)
 
     return {
         "success": True,
@@ -304,12 +469,13 @@ def get_offline_dataset(
     region_name: Optional[str] = None,
     years: int = 10,
     frequency: str = "monthly",
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> dict:
     """
-    Return cached NASA observations when available.
+    Return compatible cached NASA data when available.
 
-    If no cached observations exist, return clearly labelled
-    synthetic demonstration data.
+    If no compatible cache exists, generate labelled demo data.
     """
 
     if variable_id not in SAMPLE_VARIABLE_SETTINGS:
@@ -317,10 +483,20 @@ def get_offline_dataset(
             f"Unsupported variable: {variable_id}"
         )
 
+    frequency = str(frequency).lower().strip()
+
+    if frequency not in {"monthly", "daily"}:
+        raise ValueError(
+            "Frequency must be either 'monthly' or 'daily'."
+        )
+
     try:
         cached_data = get_cached_dataset(
             variable_id=variable_id,
             region_name=region_name,
+            frequency=frequency,
+            latitude=latitude,
+            longitude=longitude,
         )
 
         if cached_data is not None:
@@ -330,33 +506,39 @@ def get_offline_dataset(
             variable_id=variable_id,
             years=years,
             frequency=frequency,
+            region_name=region_name,
+            latitude=latitude,
+            longitude=longitude,
         )
 
     except (ValueError, OfflineDataError):
         raise
 
     except Exception as error:
+        logger.exception(
+            "Unable to prepare offline data: %s",
+            error,
+        )
+
         raise OfflineDataError(
             f"Unable to prepare offline data: {error}"
         ) from error
 
 
 if __name__ == "__main__":
+
     print("TRENDMATRIX AI - OFFLINE DATA MANAGER")
     print("=" * 45)
 
     print("\n1. Testing cached NASA data retrieval...")
 
     cached_result = get_cached_dataset(
-        variable_id="temperature"
+        variable_id="temperature",
     )
 
     if cached_result:
         print("Cached NASA data: Available")
-        print(
-            "Observations:",
-            len(cached_result["data"]),
-        )
+        print("Observations:", len(cached_result["data"]))
         print("Source:", cached_result["source_label"])
     else:
         print("Cached NASA data: Not available")
@@ -386,4 +568,4 @@ if __name__ == "__main__":
     print("Data type:", result["data_type"])
     print("Observations:", len(result["data"]))
 
-    print("\nOffline data manager tested successfully.")
+    print("\nOffline data manager checks completed.")
