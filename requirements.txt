@@ -1,0 +1,27 @@
+
+# Web application
+Flask>=3.1,<4.0
+
+# Data processing and numerical computing
+pandas>=2.2,<4.0
+numpy>=2.0,<3.0
+
+# Statistical analysis
+scipy>=1.14,<2.0
+statsmodels>=0.14,<1.0
+pymannkendall>=1.4,<2.0
+
+# Interactive data visualization
+plotly>=6.0,<7.0
+
+# NASA API requests
+requests>=2.32,<3.0
+
+# Environment variables and API key management
+python-dotenv>=1.0,<2.0
+
+# Gemini AI integration
+google-genai>=1.0,<2.0
+
+# Testing
+pytest>=8.0,<10.0
