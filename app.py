@@ -46,6 +46,8 @@ from services.request_validation import (
     prepare_requested_frequency,
     validate_request_data,
 )
+from variables import get_all_variables
+
 from utils.common import (
     to_dict,
     safe_filename,
@@ -79,14 +81,8 @@ logger = logging.getLogger("trendmatrix")
 init_db()
 
 SUPPORTED_VARIABLES = {
-    "temperature": "Air Temperature",
-    "humidity": "Relative Humidity",
-    "wind_speed": "Wind Speed",
-    "precipitation": "Precipitation",
-    "soil_moisture": "Soil Moisture",
-    "evapotranspiration": "Evapotranspiration",
-    "ndvi": "Normalized Difference Vegetation Index (NDVI)",
-    "solar_radiation": "Solar Radiation",
+    variable_id: variable_data["name"]
+    for variable_id, variable_data in get_all_variables().items()
 }
 
 
