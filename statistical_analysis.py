@@ -282,8 +282,8 @@ def _calculate_seasonal_mann_kendall(
             "p_value": float(result.p),
             "z_score": float(result.z),
             "kendall_tau": float(result.Tau),
-            "sen_slope_per_month": float(result.slope),
-            "sen_slope_per_year": float(result.slope * 12),
+            "sen_slope_per_year": float(result.slope),
+            "sen_slope_per_month": float(result.slope / 12),
             "seasonal_period": 12,
         }
 

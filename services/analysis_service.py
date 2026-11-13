@@ -1,4 +1,4 @@
-﻿"""
+"""
 TrendMatrix AI - Analysis Service.
 
 Coordinates NASA data retrieval, offline fallback, statistical analysis,
@@ -61,6 +61,11 @@ def build_dataframe_from_stored_dataset(
     dataframe = pd.DataFrame([
         to_dict(item) for item in observations
     ])
+
+    if "date" not in dataframe.columns and "observation_date" in dataframe.columns:
+        dataframe = dataframe.rename(
+            columns={"observation_date": "date"}
+        )
 
     if not {"date", "value"}.issubset(dataframe.columns):
         raise ValueError(
@@ -550,14 +555,26 @@ def run_analysis(
     if dataframe.empty:
         raise ValueError("The selected dataset contains no observations.")
 
+    variable_id = request_data["variable_id"]
+
+    # Align the DataFrame column with the requested variable ID.
+    if variable_id not in dataframe.columns:
+        if len(dataframe.columns) == 1:
+            dataframe = dataframe.rename(
+                columns={dataframe.columns[0]: variable_id}
+            )
+        else:
+            raise ValueError(
+                f"Expected variable column '{variable_id}' was not found. "
+                f"Available columns: {list(dataframe.columns)}"
+            )
+
     dataframe, metadata = prepare_requested_frequency(
         dataframe,
-        request_data["variable_id"],
+        variable_id,
         request_data["frequency"],
         metadata,
     )
-
-    variable_id = request_data["variable_id"]
 
     unit = str(
         metadata.get("unit")
