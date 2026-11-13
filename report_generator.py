@@ -151,9 +151,8 @@ def _validate_report_inputs(analysis, metadata):
 
 def _extract_statistical_results(analysis, metadata):
     """
-    Extract verified statistical results using supported field names.
-
-    The function supports both top-level and nested result structures.
+    Extract statistical results from the analysis service output.
+    Supports top-level, linear_trend, and linear_regression structures.
     """
 
     direction = _first_available(
@@ -161,7 +160,8 @@ def _extract_statistical_results(analysis, metadata):
         [
             ("direction",),
             ("interpretation", "direction"),
-            ("linear_trend", "direction")
+            ("linear_trend", "direction"),
+            ("linear_regression", "direction")
         ],
         default="Not available"
     )
@@ -171,7 +171,8 @@ def _extract_statistical_results(analysis, metadata):
         [
             ("slope_per_year",),
             ("linear_trend", "slope_per_year"),
-            ("linear_trend", "slope")
+            ("linear_trend", "slope"),
+            ("linear_regression", "slope_per_year")
         ]
     )
 
@@ -179,7 +180,8 @@ def _extract_statistical_results(analysis, metadata):
         analysis,
         [
             ("p_value",),
-            ("linear_trend", "p_value")
+            ("linear_trend", "p_value"),
+            ("linear_regression", "p_value")
         ]
     )
 
@@ -187,7 +189,8 @@ def _extract_statistical_results(analysis, metadata):
         analysis,
         [
             ("hac_p_value",),
-            ("linear_trend", "hac_p_value")
+            ("linear_trend", "hac_p_value"),
+            ("linear_regression", "hac_p_value")
         ]
     )
 
@@ -195,7 +198,8 @@ def _extract_statistical_results(analysis, metadata):
         analysis,
         [
             ("r_squared",),
-            ("linear_trend", "r_squared")
+            ("linear_trend", "r_squared"),
+            ("linear_regression", "r_squared")
         ]
     )
 
@@ -204,17 +208,23 @@ def _extract_statistical_results(analysis, metadata):
         [
             ("confidence_interval",),
             ("linear_trend", "confidence_interval"),
-            ("linear_trend", "hac_confidence_interval")
+            ("linear_regression", "confidence_interval")
+        ]
+    )
+
+    hac_confidence_interval = _first_available(
+        analysis,
+        [
+            ("hac_confidence_interval",),
+            ("linear_trend", "hac_confidence_interval"),
+            ("linear_regression", "hac_confidence_interval")
         ]
     )
 
     mann_kendall = analysis.get("mann_kendall", {})
-
     seasonal_mann_kendall = analysis.get(
-        "seasonal_mann_kendall",
-        {}
+        "seasonal_mann_kendall", {}
     )
-
     autocorrelation = analysis.get("autocorrelation", {})
 
     if not isinstance(mann_kendall, dict):
@@ -226,6 +236,16 @@ def _extract_statistical_results(analysis, metadata):
     if not isinstance(autocorrelation, dict):
         autocorrelation = {}
 
+    autocorrelation = dict(autocorrelation)
+
+    if "lag_1" not in autocorrelation:
+        autocorrelation["lag_1"] = autocorrelation.get(
+            "lag_1_correlation"
+        )
+
+    unit = str(metadata.get("unit", "Not specified"))
+    unit = unit.replace("??C", "?C")
+
     return {
         "direction": direction,
         "slope": slope,
@@ -233,6 +253,7 @@ def _extract_statistical_results(analysis, metadata):
         "hac_p_value": hac_p_value,
         "r_squared": r_squared,
         "confidence_interval": confidence_interval,
+        "hac_confidence_interval": hac_confidence_interval,
         "mann_kendall": mann_kendall,
         "seasonal_mann_kendall": seasonal_mann_kendall,
         "autocorrelation": autocorrelation,
@@ -253,7 +274,7 @@ def _extract_statistical_results(analysis, metadata):
         "start_date": metadata.get("start_date"),
         "end_date": metadata.get("end_date"),
         "frequency": metadata.get("frequency", "Not specified"),
-        "unit": metadata.get("unit", "Not specified")
+        "unit": unit
     }
 
 
@@ -427,7 +448,12 @@ def _build_statistical_section(results):
         ),
         (
             "Lag-1 Residual Autocorrelation",
-            _format_number(autocorrelation.get("lag_1"))
+            _format_number(
+                autocorrelation.get(
+                    "lag_1_correlation",
+                    autocorrelation.get("lag_1")
+                )
+            )
         )
     ]
 
@@ -455,6 +481,23 @@ def _build_statistical_section(results):
     <tr>
         <th>Confidence Interval</th>
         <td>{html.escape(interval_text)}</td>
+    </tr>
+    """
+
+    hac_interval = results.get("hac_confidence_interval")
+
+    if isinstance(hac_interval, (list, tuple)) and len(hac_interval) >= 2:
+        hac_interval_text = (
+            f"{_format_number(hac_interval[0])} "
+            f"to {_format_number(hac_interval[1])}"
+        )
+    else:
+        hac_interval_text = "Not available"
+
+    table_rows += f"""
+    <tr>
+        <th>HAC-adjusted Confidence Interval</th>
+        <td>{html.escape(hac_interval_text)}</td>
     </tr>
     """
 

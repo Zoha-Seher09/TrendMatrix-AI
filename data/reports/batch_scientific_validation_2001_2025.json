@@ -1,0 +1,132 @@
+[
+  {
+    "variable": "temperature",
+    "success": true,
+    "data_type": "live_nasa",
+    "source": "Live NASA POWER Observations",
+    "observations": 300,
+    "unit": "\u00b0C",
+    "slope_per_year": -0.044373000080851994,
+    "regression_p_value": 0.5173958541203749,
+    "hac_p_value": 0.6310582022598693,
+    "r_squared": 0.001407682385684395,
+    "ordinary_confidence_interval": [
+      -0.1791041227445268,
+      0.09035812258282283
+    ],
+    "hac_confidence_interval": [
+      -0.22546964478821097,
+      0.13672364462650782
+    ],
+    "mann_kendall_p_value": null,
+    "seasonal_mk_p_value": null,
+    "lag_1_autocorrelation": 0.840554616821009,
+    "report": "data\\reports\\trendmatrix_temperature_Faisalabad_Faisalabad_District_Punjab_Pakistan_20261114_033019.html",
+    "report_exists": true,
+    "validation_status": "PASS"
+  },
+  {
+    "variable": "humidity",
+    "success": true,
+    "data_type": "live_nasa",
+    "source": "Live NASA POWER Observations",
+    "observations": 300,
+    "unit": "%",
+    "slope_per_year": 0.5758901746514105,
+    "regression_p_value": 5.2621741262807435e-09,
+    "hac_p_value": 7.391067131353654e-07,
+    "r_squared": 0.10826488092418393,
+    "ordinary_confidence_interval": [
+      0.3874727050638571,
+      0.7643076442389638
+    ],
+    "hac_confidence_interval": [
+      0.3479017712897932,
+      0.8038785780130289
+    ],
+    "mann_kendall_p_value": null,
+    "seasonal_mk_p_value": null,
+    "lag_1_autocorrelation": 0.5154306557209337,
+    "report": "data\\reports\\trendmatrix_humidity_Faisalabad_Faisalabad_District_Punjab_Pakistan_20261114_033022.html",
+    "report_exists": true,
+    "validation_status": "PASS"
+  },
+  {
+    "variable": "wind_speed",
+    "success": true,
+    "data_type": "live_nasa",
+    "source": "Live NASA POWER Observations",
+    "observations": 300,
+    "unit": "m/s",
+    "slope_per_year": -0.0013593800215574764,
+    "regression_p_value": 0.6187247739491726,
+    "hac_p_value": 0.7137614914566865,
+    "r_squared": 0.0008321362346357639,
+    "ordinary_confidence_interval": [
+      -0.006729330229719046,
+      0.004010570186604093
+    ],
+    "hac_confidence_interval": [
+      -0.008622930970586968,
+      0.005904170927472047
+    ],
+    "mann_kendall_p_value": null,
+    "seasonal_mk_p_value": null,
+    "lag_1_autocorrelation": 0.557637620746561,
+    "report": "data\\reports\\trendmatrix_wind_speed_Faisalabad_Faisalabad_District_Punjab_Pakistan_20261114_033026.html",
+    "report_exists": true,
+    "validation_status": "PASS"
+  },
+  {
+    "variable": "precipitation",
+    "success": true,
+    "data_type": "live_nasa",
+    "source": "Live NASA POWER Observations",
+    "observations": 300,
+    "unit": "mm/month",
+    "slope_per_year": 1.2251019377667751,
+    "regression_p_value": 0.002269730488932894,
+    "hac_p_value": 0.00929460317846283,
+    "r_squared": 0.030833845656257703,
+    "ordinary_confidence_interval": [
+      0.4420963466875353,
+      2.008107528846015
+    ],
+    "hac_confidence_interval": [
+      0.30194400087046636,
+      2.148259874663087
+    ],
+    "mann_kendall_p_value": null,
+    "seasonal_mk_p_value": null,
+    "lag_1_autocorrelation": 0.38625387671132533,
+    "report": "data\\reports\\trendmatrix_precipitation_Faisalabad_Faisalabad_District_Punjab_Pakistan_20261114_033029.html",
+    "report_exists": true,
+    "validation_status": "PASS"
+  },
+  {
+    "variable": "solar_radiation",
+    "success": true,
+    "data_type": "live_nasa",
+    "source": "Live NASA POWER Observations",
+    "observations": 300,
+    "unit": "kWh/m\u00b2/day",
+    "slope_per_year": -0.013979043540609231,
+    "regression_p_value": 0.19875819070464287,
+    "hac_p_value": 0.313852561403524,
+    "r_squared": 0.005535787626466995,
+    "ordinary_confidence_interval": [
+      -0.03533847510045597,
+      0.0073803880192375125
+    ],
+    "hac_confidence_interval": [
+      -0.04118238768190308,
+      0.01322430060068446
+    ],
+    "mann_kendall_p_value": null,
+    "seasonal_mk_p_value": null,
+    "lag_1_autocorrelation": 0.7771154866115877,
+    "report": "data\\reports\\trendmatrix_solar_radiation_Faisalabad_Faisalabad_District_Punjab_Pakistan_20261114_033032.html",
+    "report_exists": true,
+    "validation_status": "PASS"
+  }
+]
