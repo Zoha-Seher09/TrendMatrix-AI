@@ -41,6 +41,11 @@ from visualization import create_time_series_chart, save_chart_html
 from ai_explainer import explain_analysis
 from report_generator import generate_report
 from services.location_service import search_photon_locations
+from services.request_validation import (
+    filter_requested_dates,
+    prepare_requested_frequency,
+    validate_request_data,
+)
 from utils.common import (
     to_dict,
     safe_filename,
@@ -89,154 +94,14 @@ SUPPORTED_VARIABLES = {
 GEMINI_WAIT_SECONDS = 18
 
 
-def filter_requested_dates(
-    dataframe: pd.DataFrame,
-    start_date: str,
-    end_date: str,
-) -> pd.DataFrame:
-    """Keep observations within the requested date range."""
-
-    result = dataframe.copy()
-
-    index = pd.to_datetime(result.index, errors="coerce")
-    valid = ~index.isna()
-
-    result = result.loc[valid].copy()
-    result.index = index[valid]
-
-    start = pd.Timestamp(start_date)
-    end = (
-        pd.Timestamp(end_date)
-        + pd.Timedelta(days=1)
-        - pd.Timedelta(microseconds=1)
-    )
-
-    return result.loc[
-        (result.index >= start) & (result.index <= end)
-    ].sort_index()
 
 
-def prepare_requested_frequency(
-    dataframe: pd.DataFrame,
-    variable_id: str,
-    frequency: str,
-    metadata: dict,
-) -> tuple[pd.DataFrame, dict]:
-    """
-    Aggregate daily observations into monthly observations when requested.
-
-    Precipitation is accumulated; other variables use monthly means.
-    """
-
-    result = dataframe.copy()
-    updated_metadata = dict(metadata)
-
-    if frequency == "monthly":
-
-        result.index = pd.to_datetime(result.index, errors="coerce")
-        result = result.loc[~result.index.isna()]
-
-        if variable_id not in result.columns:
-            raise ValueError(
-                f"Variable '{variable_id}' is missing from the dataset."
-            )
-
-        if variable_id == "precipitation":
-            result = result[[variable_id]].resample("MS").sum(
-                min_count=1
-            )
-
-            updated_metadata["unit"] = "mm/month"
-
-        else:
-            result = result[[variable_id]].resample("MS").mean()
-
-        result = result.dropna(subset=[variable_id])
-
-    else:
-        result = result.sort_index()
-
-    if result.empty:
-        raise ValueError(
-            "No valid observations remain after frequency processing."
-        )
-
-    updated_metadata["frequency"] = frequency
-    updated_metadata["observation_count"] = len(result)
-
-    result.attrs.update(updated_metadata)
-
-    return result, updated_metadata
 
 
 # ---------------------------------------------------------------------
 # Request validation
 # ---------------------------------------------------------------------
 
-def validate_request_data(payload: dict):
-
-    variable_id = str(
-        payload.get("variable", "")
-    ).strip().lower()
-
-    region_name = str(
-        payload.get("region", "")
-    ).strip()
-
-    start_date = str(
-        payload.get("start_date", "")
-    ).strip()
-
-    end_date = str(
-        payload.get("end_date", "")
-    ).strip()
-
-    frequency = str(
-        payload.get("frequency", "monthly")
-    ).strip().lower()
-
-    if variable_id not in SUPPORTED_VARIABLES:
-        return {}, "Please select a supported Earth science variable."
-
-    if not region_name:
-        return {}, "Please select a location from the suggestions."
-
-    if frequency not in {"daily", "monthly"}:
-        return {}, "Frequency must be daily or monthly."
-
-    try:
-        start = date.fromisoformat(start_date)
-        end = date.fromisoformat(end_date)
-
-    except ValueError:
-        return {}, "Please select valid start and end dates."
-
-    if start >= end:
-        return {}, "End date must be later than start date."
-
-    try:
-        latitude = float(payload.get("latitude"))
-        longitude = float(payload.get("longitude"))
-
-    except (TypeError, ValueError):
-        return {}, "Please select a location from the suggestions."
-
-    if not -90 <= latitude <= 90:
-        return {}, "Invalid latitude."
-
-    if not -180 <= longitude <= 180:
-        return {}, "Invalid longitude."
-
-    return {
-        "variable_id": variable_id,
-        "variable_name": SUPPORTED_VARIABLES[variable_id],
-        "region_name": region_name,
-        "latitude": latitude,
-        "longitude": longitude,
-        "start_date": start_date,
-        "end_date": end_date,
-        "frequency": frequency,
-    }, None
 
 
 @app.get("/api/geocode")
@@ -806,7 +671,10 @@ def generate_scientific_report(
 
 def run_analysis(payload: dict) -> dict:
 
-    request_data, error = validate_request_data(payload)
+    request_data, error = validate_request_data(
+        payload,
+        SUPPORTED_VARIABLES,
+    )
 
     if error:
         raise ValueError(error)
