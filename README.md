@@ -1,4 +1,4 @@
-﻿# TrendMatrix AI
+# TrendMatrix AI
 
 ### Earth Systems Trend Intelligence Platform
 
@@ -116,6 +116,8 @@ python app.py
 ```
 
 Open http://127.0.0.1:5000 in your browser.
+
+For additional information about the frontend implementation, globe requirements, external CDNs, and supported live variables, see [Frontend Update Notes](docs/FRONTEND_UPDATE_NOTES.md).
 
 ## NASA Data Sources
 
