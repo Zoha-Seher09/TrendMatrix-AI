@@ -1,0 +1,38 @@
+﻿{
+    "task_type":  "point",
+    "params":  {
+                   "dates":  [
+                                 {
+                                     "startDate":  "01-01-2001",
+                                     "endDate":  "12-31-2025"
+                                 }
+                             ],
+                   "coordinates":  [
+                                       {
+                                           "category":  "Chak Jhumra Rural Agricultural Test",
+                                           "latitude":  31.58,
+                                           "id":  "FSD-RURAL-01",
+                                           "longitude":  73.2
+                                       }
+                                   ],
+                   "layers":  [
+                                  {
+                                      "layer":  "_250m_16_days_NDVI",
+                                      "product":  "MOD13Q1.061"
+                                  },
+                                  {
+                                      "layer":  "_250m_16_days_VI_Quality",
+                                      "product":  "MOD13Q1.061"
+                                  },
+                                  {
+                                      "layer":  "ET_500m",
+                                      "product":  "MOD16A2GF.061"
+                                  },
+                                  {
+                                      "layer":  "ET_QC_500m",
+                                      "product":  "MOD16A2GF.061"
+                                  }
+                              ]
+               },
+    "task_name":  "TrendMatrix-AI-Faisalabad-Historical-NDVI-ET-2001-2025"
+}

@@ -1,185 +1,253 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TrendMatrix AI | Earth Systems Trend Detective</title>
-
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#06111f">
+    <meta name="description" content="TrendMatrix AI — Earth Systems Trend Intelligence Platform powered by NASA Earth Observation Data.">
+    <title>TrendMatrix AI | Earth Systems Trend Intelligence Platform</title>
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://threejs.org">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://unpkg.com/globe.gl"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
 </head>
-
 <body>
-<main class="container">
+    <div class="app-shell">
+        <header class="topbar">
+            <a class="brand" href="/" aria-label="TrendMatrix AI home">
+                <span class="brand-mark" aria-hidden="true">TM</span>
+                <span class="brand-copy">
+                    <strong>TrendMatrix <em>AI</em></strong>
+                    <small>EARTH SYSTEMS TREND INTELLIGENCE</small>
+                </span>
+            </a>
+            <div class="topbar-right">
+                <span class="live-indicator"><i></i> NASA DATA WORKSPACE</span>
+                <span class="topbar-divider"></span>
+                <span class="topbar-caption">Powered by NASA Earth Observation Data</span>
+            </div>
+        </header>
 
-<header>
-<h1>TrendMatrix AI</h1>
-<div class="subtitle">
-Be an Earth Systems Trend Detective. Explore NASA observations,
-identify long-term trends, and generate scientific reports.
-</div>
-</header>
+        <main>
+            <section class="intro">
+                <div>
+                    <p class="eyebrow">EXPLORE EARTH. DETECT TRENDS. UNDERSTAND CHANGE.</p>
+                    <h1>Earth Systems <span>Observatory</span></h1>
+                    <p class="intro-copy">Explore a location on the interactive globe, retrieve NASA POWER observations, and investigate long-term environmental trends.</p>
+                </div>
+                <div class="intro-meta">
+                    <span class="meta-label">OBSERVATION MODE</span>
+                    <strong>Global · Point-based</strong>
+                    <span class="meta-sub">Daily and monthly time series</span>
+                </div>
+            </section>
 
-<section class="panel">
-<h2>Dataset Selection</h2>
+            <section class="workspace-grid">
+                <aside class="control-column">
+                    <section class="panel control-panel">
+                        <div class="panel-heading">
+                            <div>
+                                <span class="step-label">01 / SELECT</span>
+                                <h2>Observation settings</h2>
+                            </div>
+                            <span class="heading-icon">⌖</span>
+                        </div>
 
-<p class="muted">
-Choose an Earth science variable and search globally for a
-country, city, or region. Coordinates are detected automatically.
-Live NASA observations are requested first.
-</p>
+                        <form id="analysisForm">
+                            <div class="field">
+                                <label for="variable">EARTH SCIENCE VARIABLE</label>
+                                <select id="variable" name="variable" required>
+                                    <option value="temperature">Air Temperature · T2M</option>
+                                    <option value="humidity">Relative Humidity · RH2M</option>
+                                    <option value="precipitation">Precipitation · PRECTOTCORR</option>
+                                    <option value="wind_speed">Wind Speed · WS10M</option>
+                                    <option value="solar_radiation">Solar Radiation · ALLSKY</option>
+                                </select>
+                            </div>
 
-<form id="analysisForm">
+                            <div class="field">
+                                <label for="locationSearch">SEARCH GLOBAL LOCATION</label>
+                                <div class="search-wrap">
+                                    <span class="search-icon" aria-hidden="true">⌕</span>
+                                    <input id="locationSearch" autocomplete="off" placeholder="Search city, country or region..." required>
+                                    <button class="clear-search" id="clearLocation" type="button" aria-label="Clear location">×</button>
+                                </div>
+                                <div id="suggestions" class="suggestions" role="listbox" aria-label="Location suggestions"></div>
+                                <div id="locationHint" class="field-hint">Search and select a place, or click directly on the globe.</div>
+                                <input type="hidden" id="region" name="region">
+                                <input type="hidden" id="latitude" name="latitude">
+                                <input type="hidden" id="longitude" name="longitude">
+                            </div>
 
-<div class="form-grid">
+                            <div class="coordinate-card">
+                                <div>
+                                    <span class="coordinate-label">LATITUDE</span>
+                                    <strong id="latitudeDisplay">—</strong>
+                                </div>
+                                <div class="coordinate-divider"></div>
+                                <div>
+                                    <span class="coordinate-label">LONGITUDE</span>
+                                    <strong id="longitudeDisplay">—</strong>
+                                </div>
+                                <span class="coordinate-pin">◎</span>
+                            </div>
 
-<div class="field">
-<label for="variable">Earth Science Variable</label>
+                            <div class="date-grid">
+                                <div class="field">
+                                    <label for="start_date">START DATE</label>
+                                    <input id="start_date" name="start_date" type="date" value="2001-01-01" required>
+                                </div>
+                                <div class="field">
+                                    <label for="end_date">END DATE</label>
+                                    <input id="end_date" name="end_date" type="date" value="2025-12-31" required>
+                                </div>
+                            </div>
 
-<select id="variable" name="variable" required>
-<option value="temperature">Air Temperature</option>
-<option value="humidity">Relative Humidity</option>
-<option value="wind_speed">Wind Speed</option>
-<option value="precipitation">Precipitation</option>
-<option value="soil_moisture">Soil Moisture</option>
-<option value="evapotranspiration">Evapotranspiration</option>
-<option value="ndvi">Normalized Difference Vegetation Index (NDVI)</option>
-<option value="solar_radiation">Solar Radiation</option>
-</select>
-</div>
+                            <div class="field">
+                                <label for="frequency">TIME SERIES FREQUENCY</label>
+                                <select id="frequency" name="frequency">
+                                    <option value="monthly" selected>Monthly observations</option>
+                                    <option value="daily">Daily observations</option>
+                                </select>
+                            </div>
 
-<div class="field">
-<label for="locationSearch">Country, City, or Region</label>
+                            <button id="analyzeButton" class="primary-button" type="submit">
+                                <span>Run trend analysis</span><b aria-hidden="true">→</b>
+                            </button>
+                            <div id="status" class="status" role="status" aria-live="polite">Select a location to begin exploring Earth observations.</div>
+                        </form>
+                    </section>
 
-<input
- id="locationSearch"
- autocomplete="off"
- placeholder="Start typing: Pakistan, Lahore, London..."
- required
->
+                    <section class="panel variable-panel">
+                        <div class="panel-heading compact-heading">
+                            <div>
+                                <span class="step-label">DATA CATALOGUE</span>
+                                <h2>Available NASA POWER layers</h2>
+                            </div>
+                        </div>
+                        <div class="layer-list">
+                            <button type="button" class="layer-option active" data-variable="temperature">
+                                <span class="layer-symbol temp-symbol">°</span><span><strong>Temperature</strong><small>T2M · °C</small></span><i></i>
+                            </button>
+                            <button type="button" class="layer-option" data-variable="humidity">
+                                <span class="layer-symbol humidity-symbol">◌</span><span><strong>Humidity</strong><small>RH2M · %</small></span><i></i>
+                            </button>
+                            <button type="button" class="layer-option" data-variable="precipitation">
+                                <span class="layer-symbol rain-symbol">⌁</span><span><strong>Precipitation</strong><small>PRECTOTCORR</small></span><i></i>
+                            </button>
+                            <button type="button" class="layer-option" data-variable="wind_speed">
+                                <span class="layer-symbol wind-symbol">≋</span><span><strong>Wind speed</strong><small>WS10M · m/s</small></span><i></i>
+                            </button>
+                            <button type="button" class="layer-option" data-variable="solar_radiation">
+                                <span class="layer-symbol solar-symbol">☼</span><span><strong>Solar radiation</strong><small>ALLSKY_SFC_SW_DWN</small></span><i></i>
+                            </button>
+                        </div>
+                        <p class="catalogue-note">Choose a layer to set the variable for analysis. The globe is a geographic selector, not a gridded raster map.</p>
+                    </section>
+                </aside>
 
-<div id="suggestions" class="suggestions"></div>
+                <section class="globe-column">
+                    <div class="globe-panel">
+                        <div class="globe-topline">
+                            <div>
+                                <span class="step-label">02 / EXPLORE</span>
+                                <h2>Interactive Earth</h2>
+                            </div>
+                            <div class="globe-status"><i></i> 3D GLOBE ACTIVE</div>
+                        </div>
+                        <div class="globe-stage">
+                            <div class="globe-grid-overlay" aria-hidden="true"></div>
+                            <div id="earthGlobe" aria-label="Interactive 3D Earth globe. Click to select coordinates; drag to rotate and scroll to zoom."></div>
+                            <div class="globe-loading" id="globeLoading">
+                                <span class="loading-orbit"></span>
+                                <span>Initializing Earth Observatory…</span>
+                            </div>
+                            <div class="globe-vignette" aria-hidden="true"></div>
+                            <div class="globe-controls">
+                                <button type="button" id="globeZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+                                <button type="button" id="globeZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+                                <span></span>
+                                <button type="button" id="globeReset" title="Reset globe view" aria-label="Reset globe view">↺</button>
+                            </div>
+                            <div class="globe-hint"><span class="mouse-icon">⌖</span> DRAG TO ROTATE <b>·</b> SCROLL TO ZOOM <b>·</b> CLICK TO SELECT</div>
+                            <div class="globe-coordinates" id="globeCoordinates">AWAITING LOCATION SELECTION</div>
+                        </div>
+                        <div class="globe-footer">
+                            <div class="selected-location">
+                                <span class="location-dot"></span>
+                                <div><small>SELECTED OBSERVATION POINT</small><strong id="selectedLocationName">No location selected</strong></div>
+                            </div>
+                            <div class="globe-footer-note">NASA POWER · DAILY POINT OBSERVATIONS</div>
+                        </div>
+                    </div>
 
-<div id="locationHint" class="hint">
-Type at least two letters. Worldwide suggestions will appear automatically.
-</div>
+                    <div class="science-note">
+                        <span class="note-icon">ⓘ</span>
+                        <p><strong>Scientific spatial note:</strong> NASA POWER returns observations for the selected coordinates. These values represent a point location and must not be interpreted as a country-wide or regional spatial average.</p>
+                    </div>
+                </section>
+            </section>
 
-<input type="hidden" id="region" name="region">
-<input type="hidden" id="latitude" name="latitude">
-<input type="hidden" id="longitude" name="longitude">
+            <section id="resultSection" class="results-section">
+                <div class="results-heading">
+                    <div><span class="step-label">03 / INVESTIGATE</span><h2>Earth systems intelligence</h2></div>
+                    <span class="results-tag">ANALYSIS OUTPUT</span>
+                </div>
 
-</div>
+                <section class="panel result-panel">
+                    <div class="panel-heading">
+                        <div><span class="step-label">DATA PROVENANCE</span><h3>Dataset information</h3></div>
+                        <span id="sourceLabel" class="source-badge"></span>
+                    </div>
+                    <div id="datasetInfo" class="info-grid"></div>
+                    <div id="dataWarning"></div>
+                </section>
 
-<div class="field">
-<label for="start_date">Start Date</label>
-<input
- id="start_date"
- name="start_date"
- type="date"
- value="2016-01-01"
- required
->
-</div>
+                <section class="panel result-panel">
+                    <div class="panel-heading">
+                        <div><span class="step-label">TIME SERIES</span><h3>Environmental signal</h3></div>
+                        <span class="mini-tag">INTERACTIVE PLOTLY CHART</span>
+                    </div>
+                    <iframe id="chartFrame" class="chart-frame" title="Interactive time-series chart" loading="lazy"></iframe>
+                    <p class="section-note">Use the Plotly toolbar to zoom, pan, and download the chart.</p>
+                </section>
 
-<div class="field">
-<label for="end_date">End Date</label>
-<input
- id="end_date"
- name="end_date"
- type="date"
- value="2025-12-31"
- required
->
-</div>
+                <section class="panel result-panel">
+                    <div class="panel-heading">
+                        <div><span class="step-label">STATISTICAL EVIDENCE</span><h3>Trend analysis</h3></div>
+                        <span class="mini-tag">PYTHON-CALCULATED</span>
+                    </div>
+                    <div id="keyMetrics" class="metrics"></div>
+                    <h4>Detailed statistical results</h4>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Measure</th><th>Result</th><th>Interpretation</th></tr></thead>
+                            <tbody id="statisticsTable"></tbody>
+                        </table>
+                    </div>
+                    <div id="scientificCaution" class="warning-box"></div>
+                </section>
 
-<div class="field">
-<label for="frequency">Data Frequency</label>
+                <div class="results-two-column">
+                    <section class="panel result-panel">
+                        <div class="panel-heading"><div><span class="step-label">AI ASSISTANCE</span><h3>Gemini explanation</h3></div><span class="mini-tag">OPTIONAL</span></div>
+                        <div id="aiStatus" class="section-note"></div>
+                        <div id="aiOutput" class="ai-text"></div>
+                    </section>
+                    <section class="panel result-panel">
+                        <div class="panel-heading"><div><span class="step-label">EXPORT</span><h3>Scientific report</h3></div><span class="mini-tag">HTML</span></div>
+                        <p id="reportStatus" class="section-note"></p>
+                        <a id="reportLink" class="report-link" target="_blank" rel="noopener" style="display:none">Open scientific report <span>↗</span></a>
+                    </section>
+                </div>
+            </section>
+        </main>
 
-<select id="frequency" name="frequency">
-<option value="monthly" selected>Monthly</option>
-<option value="daily">Daily</option>
-</select>
-</div>
-
-</div>
-
-<button id="analyzeButton" type="submit">
-Analyze Earth Science Trends
-</button>
-
-<div id="status" class="status" role="status" aria-live="polite"></div>
-
-</form>
-</section>
-
-
-<section id="resultSection" class="result">
-
-<div class="panel">
-<h2>Dataset Information</h2>
-<span id="sourceLabel" class="source"></span>
-<div id="datasetInfo" class="info-grid"></div>
-<div id="dataWarning"></div>
-</div>
-
-<div class="panel">
-<h2>Time-Series Visualization</h2>
-<iframe
- id="chartFrame"
- class="chart-frame"
- title="Interactive time-series chart"
- loading="lazy"
-></iframe>
-<div class="section-note">
-Use the Plotly toolbar to zoom, pan, and download the chart.
-</div>
-</div>
-
-<div class="panel">
-<h2>Statistical Analysis</h2>
-<div id="keyMetrics" class="metrics"></div>
-
-<h3>Detailed Statistical Results</h3>
-
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th>Measure</th>
-<th>Result</th>
-<th>Interpretation</th>
-</tr>
-</thead>
-<tbody id="statisticsTable"></tbody>
-</table>
-</div>
-
-<div id="scientificCaution" class="warning-box"></div>
-</div>
-
-<div class="panel">
-<h2>Gemini AI Explanation</h2>
-<div id="aiStatus" class="section-note"></div>
-<div id="aiOutput" class="ai-text"></div>
-</div>
-
-<div class="panel">
-<h2>Scientific Report</h2>
-<p id="reportStatus" class="muted"></p>
-<a
- id="reportLink"
- class="link"
- target="_blank"
- rel="noopener"
- style="display:none"
->
-Open Scientific Report ↗
-</a>
-</div>
-
-</section>
-</main>
-
-
-<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+        <footer class="footer">
+            <span>TrendMatrix AI · Earth Systems Trend Intelligence Platform</span>
+            <span>Explore Earth. Detect Trends. Understand Change.</span>
+        </footer>
+    </div>
 </body>
 </html>
