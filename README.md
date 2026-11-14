@@ -1,4 +1,5 @@
 ﻿# TrendMatrix AI
+
 ### Earth Systems Trend Intelligence Platform
 
 **Explore Earth. Detect Trends. Understand Change.**
@@ -75,34 +76,44 @@ Statistical significance does not establish causation. Results should be interpr
 
 Clone the repository:
 
-    git clone https://github.com/Zoha-Seher09/TrendMatrix-AI.git
-    cd TrendMatrix-AI
+```bash
+git clone https://github.com/Zoha-Seher09/TrendMatrix-AI.git
+cd TrendMatrix-AI
+```
 
 Create and activate a virtual environment (Windows PowerShell):
 
-    python -m venv .venv
-    .\.venv\Scripts\Activate.ps1
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
 Install dependencies:
 
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
 Create a `.env` file in the project root. Example:
 
-    SECRET_KEY=replace-with-a-secure-random-secret
-    FLASK_DEBUG=false
-    GEMINI_API_KEY=
-    GEMINI_MODEL=gemini-2.5-flash
-    OFFLINE_MODE_ENABLED=true
-    USE_SAMPLE_DATA_AS_FALLBACK=true
-    NASA_REQUEST_TIMEOUT=30
+```env
+SECRET_KEY=replace-with-a-secure-random-secret
+FLASK_DEBUG=false
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+OFFLINE_MODE_ENABLED=true
+USE_SAMPLE_DATA_AS_FALLBACK=true
+NASA_REQUEST_TIMEOUT=30
+```
 
 The Gemini API key is optional. Never publish real API keys or credentials.
 
 Start the application:
 
-    python app.py
+```bash
+python app.py
+```
 
 Open http://127.0.0.1:5000 in your browser.
 
@@ -122,12 +133,6 @@ Open http://127.0.0.1:5000 in your browser.
 - Cached or sample fallback data must be distinguished from live NASA observations.
 - The globe and Earth texture use external public CDNs and require internet access.
 
-## AI Transparency
-
-AI-assisted tools were used during development for coding assistance, debugging, technical explanations, and documentation.
-
-Google Gemini 2.5 Flash is an optional supplementary explanation feature. Data retrieval, processing, and statistical calculations are performed by the application's programmed workflows.
-
 ## Intended Impact
 
 TrendMatrix AI aims to make Earth science data and environmental trend investigation more accessible to students, educators, researchers, data analysts, and the public.
@@ -137,10 +142,6 @@ TrendMatrix AI aims to make Earth science data and environmental trend investiga
 Copyright (c) 2026 TrendMatrix AI Project. All rights reserved.
 
 No license is granted to copy, modify, redistribute, or commercially use this project's original source code without prior written permission, except for permissions provided by applicable platform terms. Third-party libraries, datasets, and services remain subject to their respective licenses and terms.
-
-## Acknowledgements
-
-NASA POWER | NASA AppEEARS | Google Gemini | Flask | Plotly | Globe.gl | Python Scientific Computing Ecosystem
 
 ---
 
