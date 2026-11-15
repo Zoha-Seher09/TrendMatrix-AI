@@ -148,3 +148,16 @@ No license is granted to copy, modify, redistribute, or commercially use this pr
 ---
 
 **TrendMatrix AI — Explore Earth. Detect Trends. Understand Change.**
+
+---
+
+## 🏆 Achievement & Recognition
+
+### NASA Space Apps Challenge 2026
+
+TrendMatrix AI was developed as part of NASA Space Apps Challenge 2026.
+
+Grateful to Allah for this opportunity. A small but meaningful achievement and the beginning of a journey with many dreams ahead.
+
+![NASA Space Apps Challenge 2026 Certificate](assets/nasa-space-apps-2026-certificate.png)
+
